@@ -17,13 +17,31 @@ from dotenv import load_dotenv
 from gtts import gTTS
 import google.generativeai as genai
 import psycopg2
+import psycopg2.pool
 
 # Load environment variables (e.g., GEMINI_API_KEY)
 load_dotenv()
 
-# PostgreSQL database connection
+# Flexible database connection for local or production
 DATABASE_URL = os.getenv("DATABASE_URL")
-conn = psycopg2.connect(DATABASE_URL)
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is not set. Please set it in your .env file or Render settings.")
+
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+db_pool = psycopg2.pool.SimpleConnectionPool(
+    minconn=1,
+    maxconn=5,
+    dsn=DATABASE_URL
+)
+
+def get_db_connection():
+    return db_pool.getconn()
+
+def release_db_connection(conn):
+    db_pool.putconn(conn)
 
 # Flask app setup
 app = Flask(__name__)
@@ -64,40 +82,69 @@ def index():
     """
     Homepage: displays a list of all eBooks from the PostgreSQL database.
     """
-    with conn.cursor() as cur:
-        cur.execute("SELECT book_id, title FROM Books ORDER BY published_date DESC;")
-        ebooks = cur.fetchall()  # list of tuples (book_id, title)
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+            SELECT
+                b.book_id,
+                b.title,
+                a.name AS author_name,
+                b.genre,
+                b.published_date,
+                AVG(r.rating) AS avg_rating,
+                COUNT(r.review_id) AS total_reviews
+            FROM books b
+            JOIN authors a ON b.author_id = a.author_id
+            LEFT JOIN reviews r ON b.book_id = r.book_id
+            GROUP BY b.book_id, b.title, a.name, b.genre, b.published_date
+            ORDER BY b.published_date DESC;
+                    """)
+            ebooks = cur.fetchall()
+    finally:
+            release_db_connection(conn)
+        
     return render_template("index.html", ebooks=ebooks)
 
 
-@app.route("/read/<filename>")
-def read(filename):
-    """
-    Displays a single eBook's content in a styled HTML template.
-    """
-    filepath = os.path.join(EBOOK_DIR, filename)
-    if not os.path.isfile(filepath):
-        abort(404)
-    with open(filepath, "r", encoding="utf-8") as file:
-        content = file.read()
-    return render_template("read_book.html", filename=filename, content=content)
+@app.route("/read/<int:book_id>")
+def read(book_id):
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT title, content FROM books WHERE book_id = %s", (book_id,))
+            result = cur.fetchone()
+        if not result:
+            abort(404)
+        title, content = result
+    finally:
+        release_db_connection(conn)
+    return render_template("read_book.html", title=title, content=content)
 
 
-@app.route("/audio/<filename>")
-def audio(filename):
+@app.route("/audio/<int:book_id>")
+def audio(book_id):
     """
     Converts an eBook to audio using pyttsx3 and streams it in-browser.
     Changed from pyttsx3 to gtts, added additional error handling
+    Updated to save to the database instead of locally
     """
-    audio_filename = filename.replace(".txt", ".mp3")
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT title, content FROM books WHERE book_id = %s", (book_id,))
+            result = cur.fetchone()
+        if not result:
+            abort(404)
+        title, text = result
+    finally:
+        release_db_connection(conn)
+
+    audio_filename = f"book_{book_id}.mp3"
     audio_path = os.path.join(AUDIO_DIR, audio_filename)
-    ebook_path = os.path.join(EBOOK_DIR, filename)
 
     if not os.path.exists(audio_path):
         try:
-            with open(ebook_path, "r", encoding="utf-8") as file:
-                text = file.read()
-
             if not text.strip():
                 return "This eBook is empty and cannot be converted to audio.", 400
 
@@ -107,10 +154,10 @@ def audio(filename):
             logging.info(f"Audio generated: {audio_filename}")
 
         except Exception as e:
-            logging.error(f"Audio generation failed for {filename}: {e}")
+            logging.error(f"Audio generation failed for book_id={book_id}: {e}")
             return f"Error during audio generation: {str(e)}", 500
 
-    return render_template("audio_player.html", audio_file=audio_filename)
+    return render_template("audio_player.html", audio_file=audio_filename, title=title)
 
 
 @app.route("/download/<filename>")
@@ -126,6 +173,7 @@ def generate():
     """
     Handles AI story generation using Gemini when the user submits a theme.
     Saves a new eBook and refreshes the index page.
+    Switched to use the database
     """
     theme = request.form.get("theme", "").strip()
     if not theme:
@@ -139,13 +187,29 @@ def generate():
         response = model.generate_content(prompt)
         story = response.text.strip()
 
-        filename_base = theme.replace(" ", "_").lower()
-        filename = generate_unique_filename(filename_base, "txt", EBOOK_DIR)
+        # Insert into database
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                # Ensure 'AI Author' exists
+                cur.execute("SELECT author_id FROM authors WHERE name = %s", ("AI Author",))
+                author = cur.fetchone()
+                if not author:
+                    cur.execute("INSERT INTO authors (name) VALUES (%s) RETURNING author_id", ("AI Author",))
+                    author_id = cur.fetchone()[0]
+                else:
+                    author_id = author[0]
 
-        with open(os.path.join(EBOOK_DIR, filename), "w", encoding="utf-8") as file:
-            file.write(story)
+                cur.execute("""
+                    INSERT INTO books (title, content, genre, published_date, author_id)
+                    VALUES (%s, %s, %s, CURRENT_DATE, %s)
+                """, (theme, story, "Fiction", author_id))
 
-        logging.info(f"New story generated and saved: {filename}")
+                conn.commit()
+        finally:
+            release_db_connection(conn)
+
+        logging.info(f"New story saved to database: {theme}")
 
     except Exception as e:
         logging.exception("Error during AI story generation")
