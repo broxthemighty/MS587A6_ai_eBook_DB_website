@@ -1,0 +1,62 @@
+<!-- ===============================================
+     Matt Lindborg
+     UAT MS587 Week 6 Assignment 6.1
+     AI eBook & Audiobook Library - Dynamic homepage
+     Purpose: Lists all eBooks with links to read, generate audio and new book, or listen
+     Notes:
+     - Fixed background from 'images/back.jpg'
+     - Changed over to gemini ai for dynamic story generation
+     - Updated styling to have a better overall UI, lighter blue
+     =============================================== -->
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI eBook & Audiobook Library</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+
+<body>
+    <div class="container">
+        <h1>📘 AI eBook & Audiobook Library</h1>
+        <p>Matt Lindborg UAT MS587 Week 3 Assignment 3.1</p>
+        <p>Github url for this site: https://github.com/broxthemighty/MS587A3_flask_gemini_eBook_website</p>
+        <!-- Functional AI story generator -->
+        <div class="ai-generator-info">
+            <form action="{{ url_for('generate') }}" method="POST">
+                <label for="theme"><strong>New Story Theme:</strong></label>
+                <input type="text" name="theme" id="theme" placeholder="e.g. Desert Heist" required>
+                <button type="submit">✍️ Generate New Story</button>
+            </form>
+        </div>
+
+        <hr>
+
+        <div class="book-list">
+            {% for book in ebooks %}
+            <!--<div class="book-card">
+                <h3>{{ book.replace('.txt', '') }}</h3>
+                <div class="actions">
+                    <a href="{{ url_for('read', filename=book) }}">📖 Read</a>
+                    <a href="{{ url_for('audio', filename=book) }}">🔊 Listen</a>
+                    <a href="{{ url_for('download', filename=book) }}">⬇ Download</a>
+                </div>
+            </div> -->
+            {% endfor %}
+            {% for book_id, title in ebooks %}
+            <div class="book-card">
+                <h3>{{ title }}</h3>
+                <div class="actions">
+                    <a href="{{ url_for('read', book_id=book_id) }}">📖 Read</a>
+                    <a href="{{ url_for('audio', filename=title.replace(' ', '_').lower() + '.txt') }}">🔊 Listen</a>
+                    <a href="{{ url_for('download', filename=title.replace(' ', '_').lower() + '.txt') }}">⬇ Download</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+
+</html>

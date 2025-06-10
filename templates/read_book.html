@@ -1,0 +1,21 @@
+<!-- read_book.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Read: {{ filename.replace('.txt', '') }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>📖 {{ filename.replace('.txt', '') }}</h2>
+
+        <div class="book-content">
+            <pre>{{ content }}</pre>
+        </div>
+
+        <br>
+        <a href="/" class="back-link">⬅ Back to Library</a>
+    </div>
+</body>
+</html>

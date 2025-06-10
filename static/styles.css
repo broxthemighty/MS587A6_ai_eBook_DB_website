@@ -1,0 +1,147 @@
+/* Basic styling for the app with a blue theme and background image */
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', sans-serif;
+    color: #fff;
+}
+
+body {
+    background: url("/static/images/back.jpg") no-repeat center center fixed;
+    background-size: cover;
+    background-attachment: fixed;
+    text-align: center;
+    display: block;
+    flex-direction: column;
+}
+
+.container {
+    padding: 40px;
+    background-color: rgba(0, 0, 80, 0.7);
+    margin: 40px auto;
+    width: 80%;
+    border-radius: 15px;
+    box-shadow: 0 0 15px #000;
+    min-height: 60vh;
+    max-width: 1200px;
+    box-sizing: border-box;
+}
+
+h1, h2 {
+    color: #cce6ff;
+    margin-bottom: 30px;
+}
+
+.book-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.book-card {
+    background-color: #003366;
+    border-radius: 10px;
+    padding: 20px;
+    width: min(200px, 90%);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    box-sizing: border-box;
+}
+
+.book-card h3 {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    word-break: break-word; 
+    font-size: 1.1em;
+    line-height: 1.4;
+}
+
+.actions a {
+    display: block;
+    margin: 8px 0;
+    color: #99ccff;
+    text-decoration: none;
+    font-weight: bold;
+    transition: color 0.3s ease;
+}
+
+.actions a:hover {
+    color: #ffffff;
+}
+
+.ai-generator-info {
+    background-color: rgba(0, 0, 60, 0.6);
+    border: 1px dashed #66aaff;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.ai-generator-info form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.ai-generator-info input[type="text"] {
+    padding: 8px;
+    width: 250px;
+    border-radius: 6px;
+    border: 1px solid #66aaff;
+    font-size: 1em;
+}
+
+.ai-generator-info button {
+    padding: 10px 20px;
+    background-color: #0066cc;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 1em;
+    cursor: pointer;
+}
+
+.ai-generator-info button:hover {
+    background-color: #3399ff;
+}
+
+.back-link {
+    color: #99ccff;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.1em;
+    transition: color 0.3s ease;
+}
+
+.back-link:hover {
+    color: #ffffff;
+}
+
+.book-content {
+    background-color: rgba(0, 0, 80, 0.6);
+    padding: 20px;
+    border-radius: 10px;
+    text-align: left;
+    word-break: break-word;
+    white-space: pre-wrap;         
+    overflow-wrap: break-word;     
+    box-shadow: 0 0 12px rgba(0,0,0,0.3);
+    max-height: 60vh;
+    overflow-y: auto;
+    color: #e0f7ff;
+}
+
+.book-content pre {
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    line-height: 1.6;
+    white-space: pre-wrap;         
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
