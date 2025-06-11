@@ -20,7 +20,7 @@ import psycopg2
 import psycopg2.pool
 
 # Load environment variables (e.g., GEMINI_API_KEY)
-load_dotenv()
+load_dotenv(override=True)
 
 # Flexible database connection for local or production
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -70,13 +70,6 @@ def generate_unique_filename(base: str, extension: str, directory: str) -> str:
 
 
 @app.route("/")
-
-#def index():
-#    """
-#    Homepage: displays a list of all .txt eBooks in the library.
-#    """
-#    ebooks = sorted(f for f in os.listdir(EBOOK_DIR) if f.endswith(".txt"))
-#    return render_template("index.html", ebooks=ebooks)
 
 def index():
     """
