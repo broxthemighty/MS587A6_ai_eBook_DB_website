@@ -1,19 +1,30 @@
 <!-- read_book.html -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Read: {{ title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
+
 <body>
     <div class="container">
         <h2>📖 {{ title }}</h2>
         <div class="book-content">
             <pre>{{ content }}</pre>
         </div>
+        <h3>Leave a Review</h3>
+        <form method="POST" action="{{ url_for('submit_review', book_id=book_id) }}">
+            <input type="text" name="username" placeholder="Your name" required><br>
+            <input type="email" name="email" placeholder="Email" required><br>
+            <input type="number" name="rating" min="1" max="5" required><br>
+            <textarea name="review_text" placeholder="Write your review..." required></textarea><br>
+            <button type="submit">Submit Review</button>
+        </form>
         <br>
         <a href="/" class="back-link">⬅ Back to Library</a>
     </div>
 </body>
+
 </html>

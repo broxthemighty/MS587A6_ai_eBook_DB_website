@@ -209,6 +209,42 @@ def generate():
 
     return redirect(url_for("index"))
 
+@app.route("/submit_review/<int:book_id>", methods=["POST"])
+def submit_review(book_id):
+    """
+    Submit a review for a book
+    Changed to use the database
+    """
+    username = request.form["username"]
+    email = request.form["email"]
+    rating = int(request.form["rating"])
+    text = request.form["review_text"]
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # Create user if not exists
+            cur.execute("SELECT user_id FROM users WHERE email = %s", (email,))
+            user = cur.fetchone()
+            if not user:
+                cur.execute(
+                    "INSERT INTO users (username, email) VALUES (%s, %s) RETURNING user_id",
+                    (username, email),
+                )
+                user_id = cur.fetchone()[0]
+            else:
+                user_id = user[0]
+
+            cur.execute(
+                "INSERT INTO reviews (user_id, book_id, rating, review_text, review_date) VALUES (%s, %s, %s, %s, CURRENT_DATE)",
+                (user_id, book_id, rating, text),
+            )
+            conn.commit()
+    finally:
+        release_db_connection(conn)
+
+    return redirect(url_for("read", book_id=book_id))
+
 
 if __name__ == "__main__":
     app.run(debug=True)
