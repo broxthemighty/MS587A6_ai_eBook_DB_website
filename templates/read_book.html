@@ -1,3 +1,11 @@
+<!-- ===============================================
+     Matt Lindborg
+     UAT MS587 Week 6 Assignment 6.1
+     AI eBook & Audiobook Library - Dynamic homepage
+     Purpose: Lists all eBooks with links to read, generate audio and new book, or listen
+     Notes:
+     - added reviews submission to bottom of page
+     =============================================== -->
 <!-- read_book.html -->
 <!DOCTYPE html>
 <html lang="en">
@@ -14,17 +22,80 @@
         <div class="book-content">
             <pre>{{ content }}</pre>
         </div>
-        <h3>Leave a Review</h3>
-        <form method="POST" action="{{ url_for('submit_review', book_id=book_id) }}">
-            <input type="text" name="username" placeholder="Your name" required><br>
-            <input type="email" name="email" placeholder="Email" required><br>
-            <input type="number" name="rating" min="1" max="5" required><br>
-            <textarea name="review_text" placeholder="Write your review..." required></textarea><br>
-            <button type="submit">Submit Review</button>
-        </form>
+
+        <div class="review-form-container" id="review-form-container">
+            <h3>Leave a Review</h3>
+            <div id="error-msg" class="review-message" style="display: none;"></div>
+
+            <form id="review-form" method="POST" action="{{ url_for('submit_review', book_id=book_id) }}">
+                <input type="text" name="username" placeholder="Your name" required>
+                <input type="email" name="email" placeholder="Email" required>
+
+                <div class="star-rating">
+                    {% for star in range(5, 0, -1) %}
+                    <input type="radio" id="star{{ star }}" name="rating" value="{{ star }}" required>
+                    <label for="star{{ star }}">★</label>
+                    {% endfor %}
+                </div>
+
+                <textarea name="review_text" placeholder="Write your review..." required></textarea>
+                <button type="submit">Submit Review</button>
+            </form>
+        </div>
+
         <br>
         <a href="/" class="back-link">⬅ Back to Library</a>
     </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const form = document.getElementById("review-form");
+            const msgBox = document.getElementById("error-msg");
+
+            form.addEventListener("submit", async function (e) {
+                e.preventDefault();
+
+                const formData = new FormData(form);
+
+                // Check if rating is selected
+                const rating = formData.get("rating");
+                if (!rating) {
+                    msgBox.textContent = "Please select a star rating.";
+                    msgBox.style.display = "block";
+                    msgBox.style.color = "#ff4d4d";  // red
+                    return;
+                }
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: "POST",
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        msgBox.textContent = "✅ Review Submitted!";
+                        msgBox.style.color = "#66ccff";  // light blue
+                        msgBox.style.display = "block";
+                        setTimeout(() => {
+                            msgBox.style.display = "none";
+                        }, 4000); // hide after 4 seconds
+                        form.reset();
+                    } else {
+                        msgBox.textContent = data.error;
+                        msgBox.style.color = "#ff4d4d";  // red
+                        msgBox.style.display = "block";
+                    }
+                } catch (err) {
+                    msgBox.textContent = "Something went wrong submitting your review.";
+                    msgBox.style.color = "#ff4d4d";
+                    msgBox.style.display = "block";
+                }
+            });
+        });
+    </script>
+
 </body>
 
 </html>

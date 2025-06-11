@@ -46,9 +46,15 @@ h1, h2 {
     background-color: #003366;
     border-radius: 10px;
     padding: 20px;
-    width: min(220px, 90%);
+    width: min(240px, 90%);
     box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     box-sizing: border-box;
+    transition: transform 0.2s ease;
+}
+
+.book-card:hover {
+    transform: scale(1.03);
+    box-shadow: 0 6px 10px rgba(0,0,0,0.4);
 }
 
 .book-card h3 {
@@ -144,4 +150,137 @@ h1, h2 {
     white-space: pre-wrap;         
     word-break: break-word;
     overflow-wrap: break-word;
+}
+
+form {
+    margin-top: 0;
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    text-align: left;
+    color: inherit;
+    box-shadow: none;
+}
+
+form input[type="text"],
+form input[type="email"],
+form input[type="number"],
+form textarea,
+form select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 12px;
+    border: 1px solid #66aaff;
+    border-radius: 6px;
+    font-size: 1em;
+    background-color: #00264d;
+    color: #e0f7ff;
+}
+
+form textarea {
+    resize: vertical;
+    height: 100px;
+}
+
+form button {
+    background-color: #0077cc;
+    border: none;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 1em;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+form button:hover {
+    background-color: #3399ff;
+}
+
+.navbar {
+    background-color: #002244;
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    border-bottom: 2px solid #004080;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+
+.navbar a {
+    color: #99ccff;
+    text-decoration: none;
+    font-weight: bold;
+    transition: color 0.3s ease;
+}
+
+.navbar a:hover {
+    color: #ffffff;
+}
+
+.stars {
+    color: #ffc107;
+    font-size: 1.2em;
+}
+
+.review-form-container {
+    margin: 40px auto;
+    width: 33%;
+    min-width: 300px;
+    padding: 30px 20px;
+    background-color: rgba(0, 0, 80, 0.7);  /* Match .container */
+    border-radius: 15px;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+    text-align: center;
+}
+
+.review-form-container form input[type="text"],
+.review-form-container form input[type="email"],
+.review-form-container form button, 
+.review-form-container form textarea {
+    width: 90%;
+    margin: 0 auto 12px;
+    display: block;
+}
+
+
+.star-rating {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.star-rating input[type="radio"] {
+    display: none;
+}
+
+.star-rating label {
+    font-size: 2em;
+    color: #444;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.star-rating input[type="radio"]:checked ~ label,
+.star-rating label:hover,
+.star-rating label:hover ~ label {
+    color: #ffc107;
+}
+
+.review-message {
+    font-weight: bold;
+    margin-bottom: 10px;
+    display: none; /* hidden by default */
+}
+
+.listen-status {
+    font-weight: bold;
+    margin-left: 6px;
+    color: #66ccff;
+}
+
+.listen-btn[disabled] {
+    opacity: 0.6;
+    pointer-events: none;
 }

@@ -8,6 +8,9 @@
      - Changed over to gemini ai for dynamic story generation
      - Updated styling to have a better overall UI, lighter blue
      - Updated to use database connection info instead of local files
+     - Tried a navigation bar, not really needed
+     - Updated styling to use stars for ratings
+     - Ready for live hosting
      =============================================== -->
 <!-- index.html -->
 <!DOCTYPE html>
@@ -20,12 +23,16 @@
 </head>
 
 <body>
+    <!-- <nav class="navbar">
+        <a href="{{ url_for('index') }}">🏠 Home</a>
+        <a href="#generate">✍️ Generate Book</a>
+    </nav> -->
     <div class="container">
         <h1>📘 AI eBook & Audiobook Library</h1>
         <p>Matt Lindborg UAT MS587 Week 6 Assignment 6.1</p>
         <p>Github url for this site: https://github.com/broxthemighty/MS587A6_ai_eBook_DB_website</p>
         <!-- Functional AI story generator -->
-        <div class="ai-generator-info">
+        <div class="ai-generator-info" id="generate">
             <form action="{{ url_for('generate') }}" method="POST">
                 <label for="theme"><strong>New Story Theme:</strong></label>
                 <input type="text" name="theme" id="theme" placeholder="e.g. Desert Heist" required>
@@ -42,16 +49,69 @@
                 <p><strong>Author:</strong> {{ book[2] }}</p>
                 <p><strong>Genre:</strong> {{ book[3] }}</p>
                 <p><strong>Published:</strong> {{ book[4] }}</p>
-                <p><strong>Avg Rating:</strong> {{ book[5]|round(1) if book[5] else "N/A" }} ({{ book[6] }} reviews)</p>
+                <p><strong>Avg Rating:</strong>
+                    {% if book[5] %}
+                    <span class="stars">
+                        {% for i in range(1, 6) %}
+                        {% if i <= book[5]|round(0, 'floor' ) %} ★ {% else %} ☆ {% endif %} {% endfor %} </span>
+                            ({{ book[6] }} reviews)
+                            {% else %}
+                            N/A
+                            {% endif %}
+                </p>
                 <div class="actions">
                     <a href="{{ url_for('read', book_id=book[0]) }}">📖 Read</a>
-                    <a href="{{ url_for('audio', book_id=book[0]) }}">🔊 Listen</a>
-                    <a href="{{ url_for('static', filename='audio/book_' ~ book[0] ~ '.mp3') }}" download>⬇ Download MP3</a>
+                    <a href="#" class="listen-btn" data-id="{{ book[0] }}" id="btn-{{ book[0] }}">
+                        🔊 Listen <span class="listen-status" id="status-{{ book[0] }}"></span></a>
+                    <a href="{{ url_for('static', filename='audio/book_' ~ book[0] ~ '.mp3') }}" download>⬇ Download
+                        MP3</a>
                 </div>
             </div>
             {% endfor %}
         </div>
     </div>
+    <script>
+        document.querySelectorAll('.listen-btn').forEach(btn => {
+            btn.addEventListener('click', async function (e) {
+                e.preventDefault();
+
+                const bookId = this.dataset.id;
+                const audioUrl = `/static/audio/book_${bookId}.mp3`;
+                const statusEl = document.getElementById(`status-${bookId}`);
+                const buttonEl = document.getElementById(`btn-${bookId}`);
+
+                try {
+                    // First, check if the MP3 already exists
+                    const headRes = await fetch(audioUrl, { method: 'HEAD' });
+                    if (headRes.ok) {
+                        // File exists, go directly to the player
+                        window.location.href = `/audio/${bookId}`;
+                        return;
+                    }
+
+                    // Otherwise, generate the file
+                    buttonEl.style.pointerEvents = "none";
+                    statusEl.textContent = "⏳ Generating...";
+
+                    const res = await fetch(`/audio/${bookId}`);
+                    const html = await res.text();
+
+                    if (res.ok) {
+                        statusEl.textContent = "✅ Ready, Please Click Here Again";
+                        buttonEl.style.pointerEvents = "auto";
+                    } else {
+                        statusEl.textContent = "⚠️ Error generating audio";
+                        buttonEl.style.pointerEvents = "auto";
+                    }
+                } catch (err) {
+                    statusEl.textContent = "❌ Failed";
+                    buttonEl.style.pointerEvents = "auto";
+                    console.error("Error checking/creating audio:", err);
+                }
+            });
+        });
+    </script>
+
 </body>
 
 </html>

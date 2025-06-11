@@ -7,12 +7,14 @@
 #    - Fixed background from 'images/back.jpg'
 #    - Changed over to gemini ai for dynamic story generation
 #    - Changed from pyttsx3 to gTTS for cloud compatible mp3 from text
+#    - Changed local filesystem data handling to use a database
+#    - Ready for live hosting
 #===============================================
 
 #app.py
 import os
 import logging
-from flask import Flask, render_template, send_from_directory, request, abort, redirect, url_for
+from flask import Flask, render_template, send_from_directory, request, abort, redirect, url_for, jsonify
 from dotenv import load_dotenv
 from gtts import gTTS
 import google.generativeai as genai
@@ -55,7 +57,6 @@ os.makedirs(AUDIO_DIR, exist_ok=True)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-
 def generate_unique_filename(base: str, extension: str, directory: str) -> str:
     """
     Prevents file overwrites by appending a numeric suffix.
@@ -67,7 +68,6 @@ def generate_unique_filename(base: str, extension: str, directory: str) -> str:
         counter += 1
         candidate = f"{base}_{counter}.{extension}"
     return candidate
-
 
 @app.route("/")
 
@@ -99,7 +99,6 @@ def index():
         
     return render_template("index.html", ebooks=ebooks)
 
-
 @app.route("/read/<int:book_id>")
 def read(book_id):
     conn = get_db_connection()
@@ -112,8 +111,7 @@ def read(book_id):
         title, content = result
     finally:
         release_db_connection(conn)
-    return render_template("read_book.html", title=title, content=content)
-
+    return render_template("read_book.html", title=title, content=content, book_id=book_id)
 
 @app.route("/audio/<int:book_id>")
 def audio(book_id):
@@ -152,14 +150,12 @@ def audio(book_id):
 
     return render_template("audio_player.html", audio_file=audio_filename, title=title)
 
-
 @app.route("/download/<filename>")
 def download(filename):
     """
     Allows users to download the raw .txt version of a book.
     """
     return send_from_directory(EBOOK_DIR, filename, as_attachment=True)
-
 
 @app.route("/generate", methods=["POST"])
 def generate():
@@ -184,15 +180,14 @@ def generate():
         conn = get_db_connection()
         try:
             with conn.cursor() as cur:
-                # Ensure 'AI Author' exists
-                cur.execute("SELECT author_id FROM authors WHERE name = %s", ("AI Author",))
+               # Ensure 'Gemini AI' exists
+                cur.execute("SELECT author_id FROM authors WHERE name = %s", ("Gemini AI",))
                 author = cur.fetchone()
                 if not author:
-                    cur.execute("INSERT INTO authors (name) VALUES (%s) RETURNING author_id", ("AI Author",))
+                    cur.execute("INSERT INTO authors (name) VALUES (%s) RETURNING author_id", ("Gemini AI",))
                     author_id = cur.fetchone()[0]
                 else:
                     author_id = author[0]
-
                 cur.execute("""
                     INSERT INTO books (title, content, genre, published_date, author_id)
                     VALUES (%s, %s, %s, CURRENT_DATE, %s)
@@ -214,6 +209,7 @@ def submit_review(book_id):
     """
     Submit a review for a book
     Changed to use the database
+    Returns JSON instead of rendering a page.
     """
     username = request.form["username"]
     email = request.form["email"]
@@ -223,18 +219,29 @@ def submit_review(book_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # Create user if not exists
+            # Check if the username exists
+            cur.execute("SELECT user_id, email FROM users WHERE username = %s", (username,))
+            user_by_name = cur.fetchone()
+
+            # Check if the email exists
             cur.execute("SELECT user_id FROM users WHERE email = %s", (email,))
-            user = cur.fetchone()
-            if not user:
+            user_by_email = cur.fetchone()
+
+            if user_by_name:
+                user_id, existing_email = user_by_name
+                if existing_email != email:
+                    return jsonify(success=False, error="❌ Email does not match the username on file.")
+            elif not user_by_email:
+                # Create new user if email not in use
                 cur.execute(
                     "INSERT INTO users (username, email) VALUES (%s, %s) RETURNING user_id",
                     (username, email),
                 )
                 user_id = cur.fetchone()[0]
             else:
-                user_id = user[0]
+                user_id = user_by_email[0]
 
+            # Insert the review
             cur.execute(
                 "INSERT INTO reviews (user_id, book_id, rating, review_text, review_date) VALUES (%s, %s, %s, %s, CURRENT_DATE)",
                 (user_id, book_id, rating, text),
@@ -243,8 +250,7 @@ def submit_review(book_id):
     finally:
         release_db_connection(conn)
 
-    return redirect(url_for("read", book_id=book_id))
-
+    return jsonify(success=True)
 
 if __name__ == "__main__":
     app.run(debug=True)
