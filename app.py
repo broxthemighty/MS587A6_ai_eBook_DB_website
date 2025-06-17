@@ -16,7 +16,9 @@ import os
 import logging
 import json
 import tempfile
+import time
 from datetime import timedelta
+from requests.exceptions import HTTPError
 
 # Third-party imports
 from flask import (
@@ -91,6 +93,21 @@ def get_db_connection():
 
 def release_db_connection(conn):
     db_pool.putconn(conn)
+    
+def generate_mp3_with_retries(text, out_path, max_retries=5):
+    backoff = 1.0
+    for attempt in range(max_retries):
+        try:
+            tts = gTTS(text)
+            tts.save(out_path)
+            return  # success!
+        except HTTPError as e:
+            if e.response.status_code == 429 and attempt < max_retries - 1:
+                app.logger.warning(f"gTTS rate limit hit, retrying in {backoff}s…")
+                time.sleep(backoff)
+                backoff *= 2
+            else:
+                raise  # re-raise for non-429 or out of retries
 
 @app.route("/")
 
@@ -171,10 +188,8 @@ def audio(book_id):
 
             try:
                 tmp_path = os.path.join(tempfile.gettempdir(), filename)
-                tts = gTTS(text)
-                tts.save(tmp_path)
+                generate_mp3_with_retries(text, tmp_path)
                 blob.upload_from_filename(tmp_path)
-                # signed URL instead of public
                 audio_url = blob.generate_signed_url(
                             expiration=timedelta(minutes=30),
                             version="v4",
