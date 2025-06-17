@@ -18,7 +18,6 @@ import json
 import tempfile
 import time
 from datetime import timedelta
-from requests.exceptions import HTTPError
 
 # Third-party imports
 from flask import (
