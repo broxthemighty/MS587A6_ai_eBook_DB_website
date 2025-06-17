@@ -1,20 +1,23 @@
 <!-- audio_player.html -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Now Playing</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
+
 <body>
     <div class="container">
         <h2>🎧 Now Playing: {{ title }}</h2>
         <audio controls autoplay>
-            <source src="{{ url_for('static', filename='audio/' + audio_file) }}" type="audio/mpeg">
-            Your browser does not support the audio tag.
+            <source src="{{ audio_url }}" type="audio/mpeg">
+            Your browser does not support the audio element.
         </audio>
         <br><br>
-       <a href="/" class="back-link">⬅ Back to Library</a>
+        <a href="/" class="back-link">⬅ Back to Library</a>
     </div>
 </body>
+
 </html>

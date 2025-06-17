@@ -14,29 +14,71 @@
 #app.py
 import os
 import logging
-from flask import Flask, render_template, send_from_directory, request, abort, redirect, url_for, jsonify
+import json
+import tempfile
+
+# Third-party imports
+from flask import (
+    Flask, render_template, request, abort, 
+    redirect, url_for, jsonify, make_response
+)
 from dotenv import load_dotenv
 from gtts import gTTS
 import google.generativeai as genai
 import psycopg2
 import psycopg2.pool
 
+# Conditional import for GCS
+from google.cloud import storage
+
+# Flask app setup
+app = Flask(__name__)
+
 # Load environment variables (e.g., GEMINI_API_KEY)
 load_dotenv(override=True)
 
-# Flexible database connection for local or production
+# Database URL
 DATABASE_URL = os.getenv("DATABASE_URL")
-
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set. Please set it in your .env file or Render settings.")
-
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# Determine environment: use GCS in production
+USE_GCS = os.getenv("FLASK_ENV") == "production"
+
+if USE_GCS:
+    # Google Cloud Storage Setup
+    key_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+    if not key_json:
+        raise ValueError("GCP_SERVICE_ACCOUNT_JSON is not set")
+    creds = json.loads(key_json)
+
+    # Write JSON blob to temp file for SDK
+    tf = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+    tf.write(json.dumps(creds).encode("utf-8"))
+    tf.close()  # >>> CHANGE (6): close file descriptor
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tf.name
+
+    # Bucket name
+    GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
+    if not GCS_BUCKET_NAME:
+        raise ValueError("GCS_BUCKET_NAME is not set")
+
+    # Initialize storage client & bucket handle
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(GCS_BUCKET_NAME)
+else:
+    # Local filesystem fallback for development (5)
+    AUDIO_DIR = os.path.join(os.getcwd(), "static", "audio")
+    os.makedirs(AUDIO_DIR, exist_ok=True)
+
+# Configure Flask's logger
+app.logger.setLevel(logging.INFO)  # >>> CHANGE (6)
+
+# Database connection pool
 db_pool = psycopg2.pool.SimpleConnectionPool(
-    minconn=1,
-    maxconn=5,
-    dsn=DATABASE_URL
+    minconn=1, maxconn=5, dsn=DATABASE_URL
 )
 
 def get_db_connection():
@@ -44,30 +86,6 @@ def get_db_connection():
 
 def release_db_connection(conn):
     db_pool.putconn(conn)
-
-# Flask app setup
-app = Flask(__name__)
-
-# Directory configuration
-EBOOK_DIR = "ebooks"
-AUDIO_DIR = "static/audio"
-os.makedirs(EBOOK_DIR, exist_ok=True)
-os.makedirs(AUDIO_DIR, exist_ok=True)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-def generate_unique_filename(base: str, extension: str, directory: str) -> str:
-    """
-    Prevents file overwrites by appending a numeric suffix.
-    Example: story.txt → story_1.txt
-    """
-    counter = 0
-    candidate = f"{base}.{extension}"
-    while os.path.exists(os.path.join(directory, candidate)):
-        counter += 1
-        candidate = f"{base}_{counter}.{extension}"
-    return candidate
 
 @app.route("/")
 
@@ -97,7 +115,10 @@ def index():
     finally:
             release_db_connection(conn)
         
-    return render_template("index.html", ebooks=ebooks)
+    ctx = {"ebooks": ebooks}
+    if USE_GCS:
+        ctx["bucket_name"] = GCS_BUCKET_NAME  # show bucket in template
+    return render_template("index.html", **ctx)
 
 @app.route("/read/<int:book_id>")
 def read(book_id):
@@ -116,9 +137,62 @@ def read(book_id):
 @app.route("/audio/<int:book_id>")
 def audio(book_id):
     """
-    Converts an eBook to audio using pyttsx3 and streams it in-browser.
-    Changed from pyttsx3 to gtts, added additional error handling
-    Updated to save to the database instead of locally
+    Generate (if needed) and serve audio via Google Cloud Storage or local fallback.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT title, content FROM books WHERE book_id = %s", (book_id,))
+            row = cur.fetchone()
+        if not row:
+            abort(404)
+        title, text = row
+    finally:
+        release_db_connection(conn)
+
+    filename = f"book_{book_id}.mp3"
+
+    if USE_GCS:
+        blob = bucket.blob(filename)
+        try:
+            exists = blob.exists()
+        except Exception as e:
+            app.logger.error(f"Error checking blob existence for {filename}: {e}")
+            exists = False
+
+        if not exists:
+            if not text.strip():
+                return "This eBook is empty and cannot be converted to audio.", 400
+
+            try:
+                tmp_path = os.path.join(tempfile.gettempdir(), filename)
+                tts = gTTS(text)
+                tts.save(tmp_path)
+                blob.upload_from_filename(tmp_path)
+                # Consider signed URL instead of public
+                audio_url = blob.generate_signed_url(expiration=3600)
+                app.logger.info(f"Generated and uploaded {filename} to GCS")
+            except Exception as e:
+                app.logger.error(f"Audio gen/upload failed: {e}")
+                return f"Error during audio processing: {e}", 500
+        else:
+            audio_url = blob.generate_signed_url(expiration=3600)
+
+        return render_template("audio_player.html", audio_url=audio_url, title=title)
+    else:
+        # Local dev fallback
+        local_path = os.path.join(AUDIO_DIR, filename)
+        if not os.path.exists(local_path):
+            tts = gTTS(text)
+            tts.save(local_path)
+        audio_url = url_for('static', filename=f"audio/{filename}")
+        return render_template("audio_player.html", audio_url=audio_url, title=title)
+
+@app.route("/download_text/<int:book_id>")
+def download_text(book_id):
+    """
+    Allows users to download the raw .txt version of a book,
+    fetching content directly from the database.
     """
     conn = get_db_connection()
     try:
@@ -127,35 +201,17 @@ def audio(book_id):
             result = cur.fetchone()
         if not result:
             abort(404)
-        title, text = result
+        title, content = result
     finally:
         release_db_connection(conn)
 
-    audio_filename = f"book_{book_id}.mp3"
-    audio_path = os.path.join(AUDIO_DIR, audio_filename)
-
-    if not os.path.exists(audio_path):
-        try:
-            if not text.strip():
-                return "This eBook is empty and cannot be converted to audio.", 400
-
-            tts = gTTS(text)
-            tts.save(audio_path)
-
-            logging.info(f"Audio generated: {audio_filename}")
-
-        except Exception as e:
-            logging.error(f"Audio generation failed for book_id={book_id}: {e}")
-            return f"Error during audio generation: {str(e)}", 500
-
-    return render_template("audio_player.html", audio_file=audio_filename, title=title)
-
-@app.route("/download/<filename>")
-def download(filename):
-    """
-    Allows users to download the raw .txt version of a book.
-    """
-    return send_from_directory(EBOOK_DIR, filename, as_attachment=True)
+    # Create a response with the text content
+    response = make_response(content)
+    # Ensure filename is safe and descriptive
+    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '.', '_')).rstrip()
+    response.headers["Content-Disposition"] = f"attachment; filename=\"{safe_title.replace(' ', '_')}.txt\""
+    response.headers["Content-Type"] = "text/plain"
+    return response
 
 @app.route("/generate", methods=["POST"])
 def generate():
@@ -253,4 +309,4 @@ def submit_review(book_id):
     return jsonify(success=True)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=(not USE_GCS))

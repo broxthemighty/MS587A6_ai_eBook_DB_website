@@ -61,10 +61,10 @@
                 </p>
                 <div class="actions">
                     <a href="{{ url_for('read', book_id=book[0]) }}">📖 Read</a>
-                    <a href="#" class="listen-btn" data-id="{{ book[0] }}" id="btn-{{ book[0] }}">
-                        🔊 Listen <span class="listen-status" id="status-{{ book[0] }}"></span></a>
-                    <a href="{{ url_for('static', filename='audio/book_' ~ book[0] ~ '.mp3') }}" download>⬇ Download
-                        MP3</a>
+                    <a href="{{ url_for('audio', book_id=book[0]) }}">🔊 Listen</a>
+                    <a href="https://storage.googleapis.com/{{ bucket_name }}/book_{{ book[0] }}.mp3" download>
+                        ⬇ Download MP3
+                    </a>
                 </div>
             </div>
             {% endfor %}
