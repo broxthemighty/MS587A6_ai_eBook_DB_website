@@ -45,18 +45,24 @@ if not DATABASE_URL:
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# only enable GCS if we actually have valid JSON
 raw_key_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON", "").strip()
-# Determine whether to use GCS based *only* on having a JSON key
-USE_GCS = bool(raw_key_json)
+creds = None
+if raw_key_json:
+    try:
+        creds = json.loads(raw_key_json)
+        USE_GCS = True
+    except json.JSONDecodeError:
+        app.logger.warning("GCP_SERVICE_ACCOUNT_JSON is not valid JSON; falling back to local audio storage")
+        USE_GCS = False
+else:
+    USE_GCS = False
 
 if USE_GCS:
-    # Google Cloud Storage Setup
-    creds = json.loads(raw_key_json)  # only runs when raw_key_json is non-empty
-
     # Write JSON blob to temp file for SDK
     tf = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
     tf.write(json.dumps(creds).encode("utf-8"))
-    tf.close()  # >>> CHANGE (6): close file descriptor
+    tf.close()
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = tf.name
 
     # Bucket name
@@ -73,7 +79,7 @@ else:
     os.makedirs(AUDIO_DIR, exist_ok=True)
 
 # Configure Flask's logger
-app.logger.setLevel(logging.INFO)  # >>> CHANGE (6)
+app.logger.setLevel(logging.INFO)
 
 # Database connection pool
 db_pool = psycopg2.pool.SimpleConnectionPool(
@@ -170,8 +176,9 @@ def audio(book_id):
                 blob.upload_from_filename(tmp_path)
                 # signed URL instead of public
                 audio_url = blob.generate_signed_url(
-                            expiration=timedelta(hours=1),
-                            version="v4"         
+                            expiration=timedelta(minutes=30),
+                            version="v4",
+                            response_disposition=f'attachment; filename="{filename}"'
                             )
                 app.logger.info(f"Generated and uploaded {filename} to GCS")
             except Exception as e:
@@ -179,8 +186,9 @@ def audio(book_id):
                 return f"Error during audio processing: {e}", 500
         else:
             audio_url = blob.generate_signed_url(
-                        expiration=timedelta(hours=1),
-                        version="v4"         
+                        expiration=timedelta(minutes=30),
+                        version="v4",
+                        response_disposition=f'attachment; filename="{filename}"'
                         )
 
         return render_template("audio_player.html", audio_url=audio_url, title=title)
