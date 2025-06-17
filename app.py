@@ -114,15 +114,22 @@ def generate_mp3_with_retries(text, out_path, max_retries=5):
             app.logger.error(f"gTTS failed on attempt {attempt}: {e}")
             raise
     
-def split_text(text, max_chars=1000):
+def split_text(text, max_chars=800):
     paras = text.split("\n\n")
     chunks, current = [], ""
     for p in paras:
+        # If a single paragraph is too large, break it into sub‐chunks
+        if len(p) > max_chars:
+            for i in range(0, len(p), max_chars):
+                chunks.append(p[i : i + max_chars])
+            continue
+
         if len(current) + len(p) + 2 <= max_chars:
             current += p + "\n\n"
         else:
             chunks.append(current.strip())
             current = p + "\n\n"
+
     if current:
         chunks.append(current.strip())
     return chunks
@@ -130,9 +137,10 @@ def split_text(text, max_chars=1000):
 def generate_mp3_chunks(text: str, out_path: str):
     # synthesize each chunk to a .part file
     temp_parts = []
-    for i, chunk in enumerate(split_text(text)):
+    for i, chunk in enumerate(split_text(text, max_chars=800)):
         part = f"{out_path}.part{i}.mp3"
         generate_mp3_with_retries(chunk, part)
+        time.sleep(0.5)               # pause half a second between calls
         temp_parts.append(part)
 
     # concatenate all parts byte-wise
