@@ -61,10 +61,7 @@
                 </p>
                 <div class="actions">
                     <a href="{{ url_for('read', book_id=book[0]) }}">📖 Read</a>
-                    <a href="{{ url_for('audio', book_id=book[0]) }}">🔊 Listen</a>
-                    <a href="https://storage.googleapis.com/{{ bucket_name }}/book_{{ book[0] }}.mp3" download>
-                        ⬇ Download MP3
-                    </a>
+                    <a href="{{ url_for('audio', book_id=book[0]) }}">🔊 Listen / Download</a>
                 </div>
             </div>
             {% endfor %}

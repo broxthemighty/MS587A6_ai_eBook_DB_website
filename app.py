@@ -16,6 +16,7 @@ import os
 import logging
 import json
 import tempfile
+from datetime import timedelta
 
 # Third-party imports
 from flask import (
@@ -44,15 +45,13 @@ if not DATABASE_URL:
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Determine environment: use GCS in production
-USE_GCS = os.getenv("FLASK_ENV") == "production"
+raw_key_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON", "").strip()
+# Determine whether to use GCS based *only* on having a JSON key
+USE_GCS = bool(raw_key_json)
 
 if USE_GCS:
     # Google Cloud Storage Setup
-    key_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
-    if not key_json:
-        raise ValueError("GCP_SERVICE_ACCOUNT_JSON is not set")
-    creds = json.loads(key_json)
+    creds = json.loads(raw_key_json)  # only runs when raw_key_json is non-empty
 
     # Write JSON blob to temp file for SDK
     tf = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
@@ -169,14 +168,20 @@ def audio(book_id):
                 tts = gTTS(text)
                 tts.save(tmp_path)
                 blob.upload_from_filename(tmp_path)
-                # Consider signed URL instead of public
-                audio_url = blob.generate_signed_url(expiration=3600)
+                # signed URL instead of public
+                audio_url = blob.generate_signed_url(
+                            expiration=timedelta(hours=1),
+                            version="v4"         
+                            )
                 app.logger.info(f"Generated and uploaded {filename} to GCS")
             except Exception as e:
                 app.logger.error(f"Audio gen/upload failed: {e}")
                 return f"Error during audio processing: {e}", 500
         else:
-            audio_url = blob.generate_signed_url(expiration=3600)
+            audio_url = blob.generate_signed_url(
+                        expiration=timedelta(hours=1),
+                        version="v4"         
+                        )
 
         return render_template("audio_player.html", audio_url=audio_url, title=title)
     else:
@@ -253,10 +258,10 @@ def generate():
         finally:
             release_db_connection(conn)
 
-        logging.info(f"New story saved to database: {theme}")
+        app.logger.info(f"New story saved to database: {theme}")
 
     except Exception as e:
-        logging.exception("Error during AI story generation")
+        app.logger.exception("Error during AI story generation")
 
     return redirect(url_for("index"))
 
