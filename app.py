@@ -29,6 +29,7 @@ from gtts import gTTS
 import google.generativeai as genai
 import psycopg2
 import psycopg2.pool
+from pydub import AudioSegment
 
 # Conditional import for GCS
 from google.cloud import storage
@@ -113,7 +114,35 @@ def generate_mp3_with_retries(text, out_path, max_retries=5):
             # non-rate-limit error or out of retries → bubble up
             app.logger.error(f"gTTS failed on attempt {attempt}: {e}")
             raise
+    
+def split_text(text, max_chars=1000):
+    """Split on paragraph boundaries so each chunk < max_chars."""
+    paras = text.split("\n\n")
+    chunks, current = [], ""
+    for p in paras:
+        if len(current) + len(p) + 2 <= max_chars:
+            current += p + "\n\n"
+        else:
+            chunks.append(current.strip())
+            current = p + "\n\n"
+    if current:
+        chunks.append(current.strip())
+    return chunks
 
+def generate_mp3_chunks(text: str, out_path: str):
+    temp_files = []
+    for i, chunk in enumerate(split_text(text)):
+        part = f"{out_path}.part{i}.mp3"
+        generate_mp3_with_retries(chunk, part)
+        temp_files.append(part)
+
+    # Simple binary concat
+    with open(out_path, "wb") as outf:
+        for fn in temp_files:
+            with open(fn, "rb") as inf:
+                outf.write(inf.read())
+            os.remove(fn)
+    
 @app.route("/")
 
 def index():
@@ -193,7 +222,7 @@ def audio(book_id):
 
             try:
                 tmp_path = os.path.join(tempfile.gettempdir(), filename)
-                generate_mp3_with_retries(text, tmp_path)
+                generate_mp3_chunks(text, tmp_path)
                 blob.upload_from_filename(tmp_path)
                 audio_url = blob.generate_signed_url(
                             expiration=timedelta(minutes=30),
