@@ -96,18 +96,24 @@ def release_db_connection(conn):
     
 def generate_mp3_with_retries(text, out_path, max_retries=5):
     backoff = 1.0
-    for attempt in range(max_retries):
+    for attempt in range(1, max_retries + 1):
         try:
             tts = gTTS(text)
             tts.save(out_path)
-            return  # success!
-        except HTTPError as e:
-            if e.response.status_code == 429 and attempt < max_retries - 1:
-                app.logger.warning(f"gTTS rate limit hit, retrying in {backoff}s…")
+            if attempt > 1:
+                app.logger.info(f"gTTS succeeded on retry #{attempt}")
+            return
+        except Exception as e:
+            msg = str(e)
+            # look for 429 in the exception text
+            if "429" in msg and attempt < max_retries:
+                app.logger.warning(f"gTTS rate limit (429) on attempt {attempt}, retrying in {backoff}s…")
                 time.sleep(backoff)
                 backoff *= 2
-            else:
-                raise  # re-raise for non-429 or out of retries
+                continue
+            # non-rate-limit error or out of retries → bubble up
+            app.logger.error(f"gTTS failed on attempt {attempt}: {e}")
+            raise
 
 @app.route("/")
 
