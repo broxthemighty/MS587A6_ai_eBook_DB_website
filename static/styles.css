@@ -1,6 +1,7 @@
 /* Basic styling for the app with a blue theme and background image */
 
-html, body {
+html,
+body {
     height: 100%;
     margin: 0;
     padding: 0;
@@ -29,7 +30,8 @@ body {
     box-sizing: border-box;
 }
 
-h1, h2 {
+h1,
+h2 {
     color: #cce6ff;
     margin-bottom: 30px;
 }
@@ -47,21 +49,21 @@ h1, h2 {
     border-radius: 10px;
     padding: 20px;
     width: min(240px, 90%);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
     box-sizing: border-box;
     transition: transform 0.2s ease;
 }
 
 .book-card:hover {
     transform: scale(1.03);
-    box-shadow: 0 6px 10px rgba(0,0,0,0.4);
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.4);
 }
 
 .book-card h3 {
     word-wrap: break-word;
     overflow-wrap: break-word;
     white-space: normal;
-    word-break: break-word; 
+    word-break: break-word;
     font-size: 1.1em;
     line-height: 1.4;
 }
@@ -135,9 +137,9 @@ h1, h2 {
     border-radius: 10px;
     text-align: left;
     word-break: break-word;
-    white-space: pre-wrap;         
-    overflow-wrap: break-word;     
-    box-shadow: 0 0 12px rgba(0,0,0,0.3);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.3);
     max-height: 60vh;
     overflow-y: auto;
     color: #e0f7ff;
@@ -147,7 +149,7 @@ h1, h2 {
     font-family: 'Courier New', monospace;
     font-size: 1rem;
     line-height: 1.6;
-    white-space: pre-wrap;         
+    white-space: pre-wrap;
     word-break: break-word;
     overflow-wrap: break-word;
 }
@@ -204,7 +206,7 @@ form button:hover {
     justify-content: space-around;
     align-items: center;
     border-bottom: 2px solid #004080;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
 }
 
 .navbar a {
@@ -228,7 +230,8 @@ form button:hover {
     width: 33%;
     min-width: 300px;
     padding: 30px 20px;
-    background-color: rgba(0, 0, 80, 0.7);  /* Match .container */
+    background-color: rgba(0, 0, 80, 0.7);
+    /* Match .container */
     border-radius: 15px;
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
     text-align: center;
@@ -236,7 +239,7 @@ form button:hover {
 
 .review-form-container form input[type="text"],
 .review-form-container form input[type="email"],
-.review-form-container form button, 
+.review-form-container form button,
 .review-form-container form textarea {
     width: 90%;
     margin: 0 auto 12px;
@@ -262,16 +265,17 @@ form button:hover {
     transition: color 0.2s;
 }
 
-.star-rating input[type="radio"]:checked ~ label,
+.star-rating input[type="radio"]:checked~label,
 .star-rating label:hover,
-.star-rating label:hover ~ label {
+.star-rating label:hover~label {
     color: #ffc107;
 }
 
 .review-message {
     font-weight: bold;
     margin-bottom: 10px;
-    display: none; /* hidden by default */
+    display: none;
+    /* hidden by default */
 }
 
 .listen-status {
@@ -283,4 +287,20 @@ form button:hover {
 .listen-btn[disabled] {
     opacity: 0.6;
     pointer-events: none;
+}
+
+.review-message {
+    display: none;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.review-message.error {
+    color: #ff4d4d;
+    display: block;
+}
+
+.review-message.success {
+    color: #66ccff;
+    display: block;
 }
