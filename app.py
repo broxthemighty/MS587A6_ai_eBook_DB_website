@@ -16,8 +16,8 @@ import os
 import logging
 import json
 import tempfile
-import time
 from datetime import timedelta
+import shutil
 
 # Third-party imports
 from flask import (
@@ -26,12 +26,9 @@ from flask import (
 )
 from dotenv import load_dotenv
 import google.generativeai as genai
-from google.cloud import texttospeech
+from google.cloud import texttospeech, storage
 import psycopg2
 import psycopg2.pool
-
-# Conditional import for GCS
-from google.cloud import storage
 
 # Flask app setup
 app = Flask(__name__)
@@ -81,9 +78,6 @@ else:
 
 # Configure Flask's logger
 app.logger.setLevel(logging.INFO)
-
-# Official gtts client
-tts_client = texttospeech.TextToSpeechClient()
 
 # Database connection pool
 db_pool = psycopg2.pool.SimpleConnectionPool(
