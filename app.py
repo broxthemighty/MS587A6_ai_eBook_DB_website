@@ -25,8 +25,8 @@ from flask import (
     redirect, url_for, jsonify, make_response
 )
 from dotenv import load_dotenv
-from gtts import gTTS
 import google.generativeai as genai
+from google.cloud import texttospeech
 import psycopg2
 import psycopg2.pool
 
@@ -82,6 +82,9 @@ else:
 # Configure Flask's logger
 app.logger.setLevel(logging.INFO)
 
+# Official gtts client
+tts_client = texttospeech.TextToSpeechClient()
+
 # Database connection pool
 db_pool = psycopg2.pool.SimpleConnectionPool(
     minconn=1, maxconn=5, dsn=DATABASE_URL
@@ -93,26 +96,30 @@ def get_db_connection():
 def release_db_connection(conn):
     db_pool.putconn(conn)
     
-def generate_mp3_with_retries(text, out_path, max_retries=5):
-    backoff = 1.0
-    for attempt in range(1, max_retries + 1):
-        try:
-            tts = gTTS(text)
-            tts.save(out_path)
-            if attempt > 1:
-                app.logger.info(f"gTTS succeeded on retry #{attempt}")
-            return
-        except Exception as e:
-            msg = str(e)
-            # look for 429 in the exception text
-            if "429" in msg and attempt < max_retries:
-                app.logger.warning(f"gTTS rate limit (429) on attempt {attempt}, retrying in {backoff}s…")
-                time.sleep(backoff)
-                backoff *= 2
-                continue
-            # non-rate-limit error or out of retries → bubble up
-            app.logger.error(f"gTTS failed on attempt {attempt}: {e}")
-            raise
+def generate_mp3_with_google_tts(text: str, out_path: str):
+    """
+    Uses the official Google Cloud Text-to-Speech API to synthesize `text`
+    and write it as an MP3 to `out_path`.
+    """
+    client = texttospeech.TextToSpeechClient()
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    voice = texttospeech.VoiceSelectionParams(
+        language_code="en-US",
+        ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+    )
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3
+    )
+
+    response = client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config
+    )
+    # Write the binary audio content to file
+    with open(out_path, "wb") as out_f:
+        out_f.write(response.audio_content)
+    app.logger.info(f"Cloud TTS generated {out_path} ({len(response.audio_content)} bytes)")
     
 def split_text(text, max_chars=800):
     paras = text.split("\n\n")
@@ -133,23 +140,20 @@ def split_text(text, max_chars=800):
     if current:
         chunks.append(current.strip())
     return chunks
-
-def generate_mp3_chunks(text: str, out_path: str):
-    # synthesize each chunk to a .part file
-    temp_parts = []
-    for i, chunk in enumerate(split_text(text, max_chars=800)):
+            
+def generate_mp3_chunks_via_cloud(text: str, out_path: str, max_chars=4500):
+    parts = []
+    for i, chunk in enumerate(split_text(text, max_chars)):
         part = f"{out_path}.part{i}.mp3"
-        generate_mp3_with_retries(chunk, part)
-        time.sleep(0.5)               # pause half a second between calls
-        temp_parts.append(part)
+        generate_mp3_with_google_tts(chunk, part)
+        parts.append(part)
 
-    # concatenate all parts byte-wise
     with open(out_path, "wb") as outf:
-        for part in temp_parts:
+        for part in parts:
             with open(part, "rb") as inf:
                 outf.write(inf.read())
             os.remove(part)
-    
+
 @app.route("/")
 
 def index():
@@ -200,12 +204,17 @@ def read(book_id):
 @app.route("/audio/<int:book_id>")
 def audio(book_id):
     """
-    Generate (if needed) and serve audio via Google Cloud Storage or local fallback.
+    Generate (if needed) and serve audio via Google Cloud Storage or local fallback,
+    now using the official Cloud Text-to-Speech helper.
     """
+    # Fetch title & text from the database
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT title, content FROM books WHERE book_id = %s", (book_id,))
+            cur.execute(
+                "SELECT title, content FROM books WHERE book_id = %s",
+                (book_id,)
+            )
             row = cur.fetchone()
         if not row:
             abort(404)
@@ -213,49 +222,39 @@ def audio(book_id):
     finally:
         release_db_connection(conn)
 
-    filename = f"book_{book_id}.mp3"
+    if not text.strip():
+        return "This eBook is empty and cannot be converted to audio.", 400
 
+    filename = f"book_{book_id}.mp3"
+    tmp_path = os.path.join(tempfile.gettempdir(), filename)
+
+    # Synthesize (always overwrite the temp file)
+    try:
+        generate_mp3_with_google_tts(text, tmp_path)
+    except Exception as e:
+        app.logger.error(f"Cloud TTS error for book {book_id}: {e}")
+        return f"Error during audio generation: {e}", 500
+
+    # Upload & get URL
     if USE_GCS:
         blob = bucket.blob(filename)
-        try:
-            exists = blob.exists()
-        except Exception as e:
-            app.logger.error(f"Error checking blob existence for {filename}: {e}")
-            exists = False
-
-        if not exists:
-            if not text.strip():
-                return "This eBook is empty and cannot be converted to audio.", 400
-
-            try:
-                tmp_path = os.path.join(tempfile.gettempdir(), filename)
-                generate_mp3_chunks(text, tmp_path)
-                blob.upload_from_filename(tmp_path)
-                audio_url = blob.generate_signed_url(
-                            expiration=timedelta(minutes=30),
-                            version="v4",
-                            response_disposition=f'attachment; filename="{filename}"'
-                            )
-                app.logger.info(f"Generated and uploaded {filename} to GCS")
-            except Exception as e:
-                app.logger.error(f"Audio gen/upload failed: {e}")
-                return f"Error during audio processing: {e}", 500
-        else:
-            audio_url = blob.generate_signed_url(
-                        expiration=timedelta(minutes=30),
-                        version="v4",
-                        response_disposition=f'attachment; filename="{filename}"'
-                        )
-
-        return render_template("audio_player.html", audio_url=audio_url, title=title)
+        blob.upload_from_filename(tmp_path)
+        audio_url = blob.generate_signed_url(
+            expiration=timedelta(hours=1),
+            version="v4",
+            response_disposition=f'attachment; filename="{filename}"'
+        )
     else:
-        # Local dev fallback
-        local_path = os.path.join(AUDIO_DIR, filename)
-        if not os.path.exists(local_path):
-            tts = gTTS(text)
-            tts.save(local_path)
-        audio_url = url_for('static', filename=f"audio/{filename}")
-        return render_template("audio_player.html", audio_url=audio_url, title=title)
+        # ensure local static dir exists
+        os.makedirs(AUDIO_DIR, exist_ok=True)
+        dest_path = os.path.join(AUDIO_DIR, filename)
+        # copy only if missing (faster after first run)
+        if not os.path.exists(dest_path):
+            shutil.copy(tmp_path, dest_path)
+        audio_url = url_for("static", filename=f"audio/{filename}")
+
+    # Render the player
+    return render_template("audio_player.html", audio_url=audio_url, title=title)
 
 @app.route("/download_text/<int:book_id>")
 def download_text(book_id):
